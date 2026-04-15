@@ -15,23 +15,25 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 
 import models, schemas, auth, payments
-from database import engine, get_db, Base
+from database import engine, get_db, Base, run_migrations
 from vision import extract_awb_from_image
-from scraper import scrape_shreemaruti
+from scraper import track_shipment, COURIERS
 
 # ── DB init ──────────────────────────────────────────────────────────────────
 Base.metadata.create_all(bind=engine)
+run_migrations()
 
 UPLOAD_DIR = Path("uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
 
-app = FastAPI(title="Shree Maruti Tracker API", version="1.0.0")
+app = FastAPI(title="Courier Track AI API", version="2.1.0")
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",
         "https://shreemaruti-tracker.vercel.app",
+        "https://couriertrack.ai",
         os.getenv("FRONTEND_URL", ""),
     ],
     allow_credentials=True,
@@ -181,11 +183,18 @@ def _check_and_increment_quota(db: Session, ip: str) -> int:
     return DAILY_FREE_LIMIT - row.count
 
 
+@app.get("/couriers")
+def list_couriers():
+    """Return all supported couriers."""
+    return [{"id": k, "name": v} for k, v in COURIERS.items()]
+
+
 @app.post("/track/public")
 async def public_track(
     request: Request,
     image: Optional[UploadFile] = File(None),
     awb_number: Optional[str] = Form(None),
+    courier: Optional[str] = Form("auto"),
     db: Session = Depends(get_db),
 ):
     """Track by AWB or image — 5 free searches/day per IP, results not saved."""
@@ -211,7 +220,7 @@ async def public_track(
     else:
         raise HTTPException(status_code=400, detail="Provide an image or AWB number")
 
-    tracking_data = await scrape_shreemaruti(final_awb)
+    tracking_data = await track_shipment(final_awb, courier or "auto")
     if "error" in tracking_data and not tracking_data.get("current_status"):
         raise HTTPException(status_code=502, detail=f"Could not fetch tracking: {tracking_data['error']}")
 
@@ -232,14 +241,15 @@ def _get_api_key(user: models.User) -> str:
 async def scan_receipt(
     image: Optional[UploadFile] = File(None),
     awb_number: Optional[str] = Form(None),
+    courier: Optional[str] = Form("auto"),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
     # ── Step 1: Resolve AWB ───────────────────────────────────────────────────
+    filename = None
     if awb_number:
         final_awb = awb_number.strip()
     elif image:
-        # All logged-in users can scan receipts for free
         ext = image.filename.rsplit(".", 1)[-1] if "." in image.filename else "jpg"
         filename = f"{uuid.uuid4()}.{ext}"
         filepath = UPLOAD_DIR / filename
@@ -253,17 +263,19 @@ async def scan_receipt(
     else:
         raise HTTPException(status_code=400, detail="Provide an image or AWB number")
 
-    # ── Step 2: Scrape Shreemaruti ────────────────────────────────────────────
-    tracking_data = await scrape_shreemaruti(final_awb)
+    # ── Step 2: Track shipment ────────────────────────────────────────────────
+    tracking_data = await track_shipment(final_awb, courier or "auto")
+    resolved_courier = tracking_data.get("courier", "shreemaruti")
 
     if "error" in tracking_data and not tracking_data.get("current_status"):
-        raise HTTPException(status_code=502, detail=f"Scraping failed: {tracking_data['error']}")
+        raise HTTPException(status_code=502, detail=f"Tracking failed: {tracking_data['error']}")
 
     # ── Step 3: Save to DB ────────────────────────────────────────────────────
     scan = models.Scan(
         user_id=current_user.id,
         awb_number=final_awb,
-        image_filename=filename if image else None,
+        courier=resolved_courier,
+        image_filename=filename,
         current_status=tracking_data.get("current_status"),
         current_location=tracking_data.get("current_location"),
         is_delivered=tracking_data.get("is_delivered", False),
@@ -303,7 +315,7 @@ async def refresh_tracking(
     if not scan:
         raise HTTPException(status_code=404, detail="AWB not found in your history")
 
-    tracking_data = await scrape_shreemaruti(awb)
+    tracking_data = await track_shipment(awb, scan.courier or "auto")
 
     scan.current_status = tracking_data.get("current_status", scan.current_status)
     scan.current_location = tracking_data.get("current_location", scan.current_location)

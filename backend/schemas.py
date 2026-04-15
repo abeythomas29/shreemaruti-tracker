@@ -45,6 +45,7 @@ class TrackingEventOut(BaseModel):
 class ScanOut(BaseModel):
     id: int
     awb_number: str
+    courier: Optional[str] = "shreemaruti"
     current_status: Optional[str] = None
     current_location: Optional[str] = None
     is_delivered: bool

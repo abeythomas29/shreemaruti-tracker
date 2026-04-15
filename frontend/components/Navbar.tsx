@@ -22,7 +22,7 @@ export default function Navbar() {
       <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
         <Link href="/dashboard" className="flex items-center gap-2 font-bold text-brand-700">
           <Package size={20} />
-          <span>Shree Maruti Tracker</span>
+          <span>Courier Track AI</span>
         </Link>
 
         <div className="flex items-center gap-1">

@@ -26,6 +26,7 @@ class Scan(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     awb_number = Column(String, nullable=False, index=True)
+    courier = Column(String, nullable=False, default="shreemaruti")
     image_filename = Column(String, nullable=True)
     current_status = Column(String, nullable=True)
     current_location = Column(String, nullable=True)

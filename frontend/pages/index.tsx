@@ -1,10 +1,11 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
+import Head from 'next/head'
 import Link from 'next/link'
 import { useRouter } from 'next/router'
 import toast from 'react-hot-toast'
 import {
   Package, Upload, Search, MapPin, CheckCircle,
-  Clock, Truck, AlertCircle, X, LogIn, UserPlus
+  Clock, Truck, AlertCircle, X, LogIn, UserPlus, ChevronDown
 } from 'lucide-react'
 import API from '../lib/api'
 import clsx from 'clsx'
@@ -18,6 +19,7 @@ interface TrackingEvent {
 
 interface TrackResult {
   awb: string
+  courier?: string
   current_status?: string
   current_location?: string
   is_delivered: boolean
@@ -26,15 +28,35 @@ interface TrackResult {
   destination?: string
 }
 
+const COURIERS = [
+  { id: 'auto',        name: 'Auto-detect courier' },
+  { id: 'shreemaruti', name: 'Shree Maruti' },
+  { id: 'delhivery',   name: 'Delhivery' },
+  { id: 'india_post',  name: 'India Post' },
+  { id: 'ekart',       name: 'Ekart (Flipkart)' },
+  { id: 'dtdc',        name: 'DTDC' },
+  { id: 'xpressbees',  name: 'XpressBees' },
+  { id: 'bluedart',    name: 'BlueDart' },
+  { id: 'shadowfax',   name: 'Shadowfax' },
+  { id: 'gati',        name: 'Gati KWE' },
+  { id: 'smartr',      name: 'Smartr Logistics' },
+  { id: 'amazon',      name: 'Amazon Logistics' },
+  { id: 'aramex',      name: 'Aramex' },
+  { id: 'rivigo',      name: 'Rivigo / Porter' },
+]
+
+const COURIER_LABEL: Record<string, string> = Object.fromEntries(
+  COURIERS.map(c => [c.id, c.name])
+)
+
 function statusIcon(status?: string) {
   const s = (status || '').toLowerCase()
   if (s.includes('delivered')) return <CheckCircle className="text-green-500" size={20} />
-  if (s.includes('out for')) return <Truck className="text-blue-500" size={20} />
+  if (s.includes('out for'))   return <Truck className="text-blue-500" size={20} />
   if (s.includes('transit') || s.includes('hub')) return <Package className="text-orange-400" size={20} />
   return <Clock className="text-gray-400" size={20} />
 }
 
-// ── Auth Gate Modal ───────────────────────────────────────────────────────────
 function AuthGateModal({ onClose }: { onClose: () => void }) {
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -70,15 +92,15 @@ function AuthGateModal({ onClose }: { onClose: () => void }) {
 export default function Home() {
   const router = useRouter()
   const fileRef = useRef<HTMLInputElement>(null)
-  const [dragging, setDragging] = useState(false)
-  const [file, setFile] = useState<File | null>(null)
-  const [manualAwb, setManualAwb] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [result, setResult] = useState<TrackResult | null>(null)
+  const [dragging, setDragging]       = useState(false)
+  const [file, setFile]               = useState<File | null>(null)
+  const [manualAwb, setManualAwb]     = useState('')
+  const [courier, setCourier]         = useState('auto')
+  const [loading, setLoading]         = useState(false)
+  const [result, setResult]           = useState<TrackResult | null>(null)
   const [showAuthGate, setShowAuthGate] = useState(false)
 
   useEffect(() => {
-    // Redirect logged-in users straight to dashboard
     if (typeof window !== 'undefined' && localStorage.getItem('token')) {
       router.replace('/dashboard')
     }
@@ -90,11 +112,11 @@ export default function Home() {
     setShowAuthGate(false)
     try {
       const fd = new FormData()
-      if (f) fd.append('image', f)
+      if (f)   fd.append('image', f)
       if (awb) fd.append('awb_number', awb)
+      fd.append('courier', courier)
       const { data } = await API.post<TrackResult>('/track/public', fd)
       setResult(data)
-      // Show auth gate: immediately if last free search, else after 1.2s
       const remaining = (data as any).searches_remaining ?? 0
       setTimeout(() => setShowAuthGate(true), remaining === 0 ? 0 : 1200)
     } catch (err: any) {
@@ -114,7 +136,7 @@ export default function Home() {
     setDragging(false)
     const f = e.dataTransfer.files[0]
     if (f) { setFile(f); doTrack(f, '') }
-  }, [])
+  }, [courier])
 
   const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0]
@@ -123,14 +145,17 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-brand-50 via-white to-gray-50">
+      <Head>
+        <title>Courier Track AI – Track Any Shipment Instantly</title>
+        <meta name="description" content="Track shipments from 13+ Indian couriers including Delhivery, DTDC, India Post, Shree Maruti, Shadowfax, Gati, Amazon and more. AI-powered AWB extraction." />
+      </Head>
 
-      {/* Auth gate modal */}
       {showAuthGate && <AuthGateModal onClose={() => setShowAuthGate(false)} />}
 
       {/* Navbar */}
       <header className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
         <div className="flex items-center gap-2 font-bold text-brand-700 text-lg">
-          <Package size={22} /> Shree Maruti Tracker
+          <Package size={22} /> Courier Track AI
         </div>
         <div className="flex items-center gap-2">
           <Link href="/login" className="btn-secondary text-sm flex items-center gap-1.5">
@@ -144,15 +169,31 @@ export default function Home() {
         {/* Hero */}
         <div className="text-center mb-8">
           <h1 className="text-4xl font-extrabold text-gray-900 leading-tight mb-3">
-            Track your Shree Maruti shipment
+            Track any courier shipment
           </h1>
           <p className="text-gray-500 text-base">
-            Upload your receipt or enter the AWB number — get live status instantly.
+            Upload your receipt or enter the AWB number — get live status across 13+ couriers.
           </p>
         </div>
 
         {/* Tracking card */}
         <div className="card space-y-4">
+
+          {/* Courier selector */}
+          <div className="relative">
+            <select
+              value={courier}
+              onChange={e => setCourier(e.target.value)}
+              className="input w-full appearance-none pr-8 cursor-pointer"
+            >
+              {COURIERS.map(c => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+            <ChevronDown size={15} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+          </div>
+
+          {/* Drop zone */}
           <div
             onDragOver={e => { e.preventDefault(); setDragging(true) }}
             onDragLeave={() => setDragging(false)}
@@ -207,12 +248,19 @@ export default function Home() {
           </div>
         )}
 
-        {/* Result — blurred until auth gate dismissed */}
+        {/* Result */}
         {result && !loading && (
           <div className={clsx('card mt-4 space-y-5 transition-all', showAuthGate && 'blur-sm pointer-events-none select-none')}>
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-xs text-gray-400 font-mono mb-1">AWB {result.awb}</p>
+                <div className="flex items-center gap-2 mb-1">
+                  <p className="text-xs text-gray-400 font-mono">AWB {result.awb}</p>
+                  {result.courier && result.courier !== 'auto' && (
+                    <span className="text-xs bg-brand-100 text-brand-700 px-2 py-0.5 rounded-full font-medium">
+                      {COURIER_LABEL[result.courier] ?? result.courier}
+                    </span>
+                  )}
+                </div>
                 <div className="flex items-center gap-2">
                   {statusIcon(result.current_status)}
                   <span className="text-lg font-bold text-gray-900">{result.current_status || 'Unknown'}</span>
@@ -268,9 +316,9 @@ export default function Home() {
         {!result && !loading && (
           <div className="grid grid-cols-3 gap-4 mt-8">
             {[
-              { icon: Upload, label: 'Upload receipt', desc: 'Photo of your consignment note' },
-              { icon: Package, label: 'AI reads AWB', desc: 'No manual typing needed' },
-              { icon: CheckCircle, label: 'Live status', desc: 'Direct from Shree Maruti' },
+              { icon: Upload,      label: 'Upload receipt',  desc: 'Photo of your consignment note' },
+              { icon: Package,     label: 'AI reads AWB',    desc: 'No manual typing needed' },
+              { icon: CheckCircle, label: 'Live status',     desc: '13+ couriers supported' },
             ].map(({ icon: Icon, label, desc }) => (
               <div key={label} className="text-center">
                 <div className="w-10 h-10 bg-brand-100 rounded-xl flex items-center justify-center mx-auto mb-2">
@@ -281,6 +329,13 @@ export default function Home() {
               </div>
             ))}
           </div>
+        )}
+
+        {/* Supported couriers strip */}
+        {!result && !loading && (
+          <p className="text-center text-xs text-gray-400 mt-6">
+            Supports: Shree Maruti · Delhivery · India Post · Ekart · DTDC · XpressBees · BlueDart · Shadowfax · Gati · Smartr · Amazon · Aramex · Rivigo
+          </p>
         )}
       </main>
     </div>

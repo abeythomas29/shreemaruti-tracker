@@ -1,9 +1,9 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/router'
 import toast from 'react-hot-toast'
 import {
   Upload, Search, Package, MapPin, CheckCircle,
-  Clock, Truck, RefreshCw, Plus, X
+  Clock, Truck, RefreshCw, Plus, X, ChevronDown
 } from 'lucide-react'
 import Navbar from '../components/Navbar'
 import API from '../lib/api'
@@ -43,11 +43,28 @@ function StatusBadge({ status, delivered }: { status?: string; delivered: boolea
     </span>
   )
 }
+const COURIERS = [
+  { id: 'auto',        name: 'Auto-detect' },
+  { id: 'shreemaruti', name: 'Shree Maruti' },
+  { id: 'delhivery',   name: 'Delhivery' },
+  { id: 'india_post',  name: 'India Post' },
+  { id: 'ekart',       name: 'Ekart (Flipkart)' },
+  { id: 'dtdc',        name: 'DTDC' },
+  { id: 'xpressbees',  name: 'XpressBees' },
+  { id: 'bluedart',    name: 'BlueDart' },
+  { id: 'shadowfax',   name: 'Shadowfax' },
+  { id: 'gati',        name: 'Gati KWE' },
+  { id: 'smartr',      name: 'Smartr Logistics' },
+  { id: 'amazon',      name: 'Amazon Logistics' },
+  { id: 'aramex',      name: 'Aramex' },
+  { id: 'rivigo',      name: 'Rivigo / Porter' },
+]
 
-// ── Track new shipment panel ──────────────────────────────────────────────────
+// ── Track new shipment panel ──────────────────────────────────────────
 function TrackPanel({ onScanned }: { onScanned: (scan: Scan) => void }) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [manualAwb, setManualAwb] = useState('')
+  const [courier, setCourier] = useState('auto')
   const [loading, setLoading] = useState(false)
   const [open, setOpen] = useState(false)
 
@@ -57,6 +74,7 @@ function TrackPanel({ onScanned }: { onScanned: (scan: Scan) => void }) {
       const fd = new FormData()
       if (file) fd.append('image', file)
       if (awb) fd.append('awb_number', awb)
+      fd.append('courier', courier)
       const { data } = await API.post<Scan>('/scan', fd)
       onScanned(data)
       setManualAwb('')
@@ -88,6 +106,19 @@ function TrackPanel({ onScanned }: { onScanned: (scan: Scan) => void }) {
       <div className="flex items-center justify-between">
         <h3 className="font-semibold text-gray-900">Track a shipment</h3>
         <button onClick={() => setOpen(false)} className="text-gray-400 hover:text-gray-600"><X size={16} /></button>
+      </div>
+      {/* Courier selector */}
+      <div className="relative">
+        <select
+          value={courier}
+          onChange={e => setCourier(e.target.value)}
+          className="input w-full appearance-none pr-8 cursor-pointer text-sm"
+        >
+          {COURIERS.map(c => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
+        </select>
+        <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
       </div>
       <div
         onClick={() => fileRef.current?.click()}

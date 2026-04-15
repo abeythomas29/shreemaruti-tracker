@@ -33,7 +33,7 @@ export default function Register() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
       <div className="w-full max-w-sm">
         <div className="flex items-center justify-center gap-2 text-brand-700 font-bold text-xl mb-8">
-          <Package size={24} /> Shree Maruti Tracker
+          <Package size={24} /> Courier Track AI
         </div>
         <div className="card">
           <h1 className="text-xl font-bold text-gray-900 mb-6">Create account</h1>
