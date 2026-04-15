@@ -156,14 +156,42 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
     return {"received": True}
 
 
-# ── Public tracking (no auth required) ───────────────────────────────────────
+# ── Public tracking (5 free searches/day per IP) ─────────────────────────────
+
+DAILY_FREE_LIMIT = 5
+
+def _get_client_ip(request: Request) -> str:
+    forwarded = request.headers.get("x-forwarded-for")
+    return forwarded.split(",")[0].strip() if forwarded else request.client.host
+
+def _check_and_increment_quota(db: Session, ip: str) -> int:
+    """Returns remaining searches after this one. Raises 429 if limit hit."""
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    row = db.query(models.PublicSearchQuota).filter_by(ip_address=ip, date=today).first()
+    if not row:
+        row = models.PublicSearchQuota(ip_address=ip, date=today, count=0)
+        db.add(row)
+    if row.count >= DAILY_FREE_LIMIT:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Daily limit of {DAILY_FREE_LIMIT} free searches reached. Sign up for unlimited tracking."
+        )
+    row.count += 1
+    db.commit()
+    return DAILY_FREE_LIMIT - row.count
+
 
 @app.post("/track/public")
 async def public_track(
+    request: Request,
     image: Optional[UploadFile] = File(None),
     awb_number: Optional[str] = Form(None),
+    db: Session = Depends(get_db),
 ):
-    """Track by AWB or image — no login needed, results not saved."""
+    """Track by AWB or image — 5 free searches/day per IP, results not saved."""
+    ip = _get_client_ip(request)
+    remaining = _check_and_increment_quota(db, ip)
+
     if awb_number:
         final_awb = awb_number.strip()
     elif image:
@@ -176,7 +204,7 @@ async def public_track(
         with filepath.open("wb") as f:
             shutil.copyfileobj(image.file, f)
         result = extract_awb_from_image(str(filepath), platform_key)
-        filepath.unlink(missing_ok=True)  # don't keep image for public requests
+        filepath.unlink(missing_ok=True)
         if not result.get("awb"):
             raise HTTPException(status_code=422, detail="Could not extract AWB from image. Try entering it manually.")
         final_awb = result["awb"]
@@ -186,6 +214,8 @@ async def public_track(
     tracking_data = await scrape_shreemaruti(final_awb)
     if "error" in tracking_data and not tracking_data.get("current_status"):
         raise HTTPException(status_code=502, detail=f"Could not fetch tracking: {tracking_data['error']}")
+
+    tracking_data["searches_remaining"] = remaining
     return tracking_data
 
 

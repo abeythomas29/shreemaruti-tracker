@@ -94,10 +94,16 @@ export default function Home() {
       if (awb) fd.append('awb_number', awb)
       const { data } = await API.post<TrackResult>('/track/public', fd)
       setResult(data)
-      // Show auth gate after result loads
-      setTimeout(() => setShowAuthGate(true), 1200)
+      // Show auth gate: immediately if last free search, else after 1.2s
+      const remaining = (data as any).searches_remaining ?? 0
+      setTimeout(() => setShowAuthGate(true), remaining === 0 ? 0 : 1200)
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Could not fetch tracking status')
+      if (err.response?.status === 429) {
+        setShowAuthGate(true)
+        toast.error('Daily limit reached — sign up for unlimited tracking!')
+      } else {
+        toast.error(err.response?.data?.detail || 'Could not fetch tracking status')
+      }
     } finally {
       setLoading(false)
     }

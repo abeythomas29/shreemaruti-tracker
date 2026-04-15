@@ -38,6 +38,15 @@ class Scan(Base):
     events = relationship("TrackingEvent", back_populates="scan", cascade="all, delete")
 
 
+class PublicSearchQuota(Base):
+    __tablename__ = "public_search_quota"
+
+    id = Column(Integer, primary_key=True, index=True)
+    ip_address = Column(String, nullable=False, index=True)
+    date = Column(String, nullable=False)          # YYYY-MM-DD
+    count = Column(Integer, default=0)
+
+
 class TrackingEvent(Base):
     __tablename__ = "tracking_events"
 
