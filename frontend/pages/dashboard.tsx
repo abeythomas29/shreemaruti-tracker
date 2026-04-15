@@ -12,6 +12,7 @@ import clsx from 'clsx'
 interface Scan {
   id: number
   awb_number: string
+  courier?: string
   current_status?: string
   current_location?: string
   is_delivered: boolean
@@ -44,21 +45,18 @@ function StatusBadge({ status, delivered }: { status?: string; delivered: boolea
   )
 }
 const COURIERS = [
-  { id: 'auto',        name: 'Auto-detect' },
+  { id: 'auto',        name: 'Auto-detect courier' },
   { id: 'shreemaruti', name: 'Shree Maruti' },
-  { id: 'delhivery',   name: 'Delhivery' },
   { id: 'india_post',  name: 'India Post' },
   { id: 'ekart',       name: 'Ekart (Flipkart)' },
-  { id: 'dtdc',        name: 'DTDC' },
-  { id: 'xpressbees',  name: 'XpressBees' },
-  { id: 'bluedart',    name: 'BlueDart' },
   { id: 'shadowfax',   name: 'Shadowfax' },
   { id: 'gati',        name: 'Gati KWE' },
-  { id: 'smartr',      name: 'Smartr Logistics' },
-  { id: 'amazon',      name: 'Amazon Logistics' },
   { id: 'aramex',      name: 'Aramex' },
-  { id: 'rivigo',      name: 'Rivigo / Porter' },
 ]
+
+const COURIER_LABEL: Record<string, string> = Object.fromEntries(
+  COURIERS.map(c => [c.id, c.name])
+)
 
 // ── Track new shipment panel ──────────────────────────────────────────
 function TrackPanel({ onScanned }: { onScanned: (scan: Scan) => void }) {
@@ -268,6 +266,11 @@ export default function Dashboard() {
                 <div className="flex items-center gap-2 flex-wrap">
                   <p className="font-mono font-semibold text-gray-900 text-sm">{scan.awb_number}</p>
                   <StatusBadge status={scan.current_status} delivered={scan.is_delivered} />
+                  {scan.courier && scan.courier !== 'shreemaruti' && (
+                    <span className="text-xs bg-brand-100 text-brand-700 px-2 py-0.5 rounded-full font-medium">
+                      {COURIER_LABEL[scan.courier] ?? scan.courier}
+                    </span>
+                  )}
                 </div>
                 {scan.current_location && (
                   <p className="flex items-center gap-1 text-xs text-gray-500 mt-1">
@@ -275,6 +278,7 @@ export default function Dashboard() {
                   </p>
                 )}
                 <p className="text-xs text-gray-400 mt-0.5">
+                  {scan.courier ? (COURIER_LABEL[scan.courier] ?? scan.courier) : 'Shree Maruti'} ·{' '}
                   Tracked {new Date(scan.created_at).toLocaleDateString()} ·{' '}
                   {scan.last_checked ? `checked ${new Date(scan.last_checked).toLocaleTimeString()}` : ''}
                 </p>

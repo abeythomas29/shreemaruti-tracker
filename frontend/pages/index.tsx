@@ -31,18 +31,11 @@ interface TrackResult {
 const COURIERS = [
   { id: 'auto',        name: 'Auto-detect courier' },
   { id: 'shreemaruti', name: 'Shree Maruti' },
-  { id: 'delhivery',   name: 'Delhivery' },
   { id: 'india_post',  name: 'India Post' },
   { id: 'ekart',       name: 'Ekart (Flipkart)' },
-  { id: 'dtdc',        name: 'DTDC' },
-  { id: 'xpressbees',  name: 'XpressBees' },
-  { id: 'bluedart',    name: 'BlueDart' },
   { id: 'shadowfax',   name: 'Shadowfax' },
   { id: 'gati',        name: 'Gati KWE' },
-  { id: 'smartr',      name: 'Smartr Logistics' },
-  { id: 'amazon',      name: 'Amazon Logistics' },
   { id: 'aramex',      name: 'Aramex' },
-  { id: 'rivigo',      name: 'Rivigo / Porter' },
 ]
 
 const COURIER_LABEL: Record<string, string> = Object.fromEntries(
@@ -357,7 +350,7 @@ export default function Home() {
         {/* Supported couriers strip */}
         {!result && !loading && (
           <p className="text-center text-xs text-gray-400 mt-6">
-            Supports: Shree Maruti · Delhivery · India Post · Ekart · DTDC · XpressBees · BlueDart · Shadowfax · Gati · Smartr · Amazon · Aramex · Rivigo
+            Supports: Shree Maruti · India Post · Ekart (Flipkart) · Shadowfax · Gati KWE · Aramex
           </p>
         )}
       </main>

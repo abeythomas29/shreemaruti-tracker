@@ -4,20 +4,14 @@ import re
 from datetime import datetime, timezone
 
 # ── Courier registry ──────────────────────────────────────────────────────────
+# Only couriers with confirmed free/public tracking endpoints (no API key required)
 COURIERS = {
     "shreemaruti": "Shree Maruti",
-    "delhivery":   "Delhivery",
     "india_post":  "India Post",
     "ekart":       "Ekart (Flipkart)",
-    "dtdc":        "DTDC",
-    "xpressbees":  "XpressBees",
-    "bluedart":    "BlueDart",
     "shadowfax":   "Shadowfax",
     "gati":        "Gati KWE",
-    "smartr":      "Smartr Logistics",
-    "amazon":      "Amazon Logistics",
     "aramex":      "Aramex",
-    "rivigo":      "Rivigo / Porter",
 }
 
 # ── Common status map ─────────────────────────────────────────────────────────
@@ -75,47 +69,38 @@ def _fmt_time(ts_ms) -> str:
 
 # ── AWB auto-detection ────────────────────────────────────────────────────────
 def detect_courier(awb: str) -> str:
+    """
+    Detect courier from AWB format. Each courier uses a distinctive pattern:
+      India Post  : 2 letters + 8 digits + IN  (e.g. EE123456789IN)
+      Ekart       : starts with FMPP / AWBF / FBF / HYF / FKMP
+      Shadowfax   : starts with SFX or SFXIND
+      Gati        : G or GA prefix + 6-10 digits (e.g. G1234567)
+      Aramex      : starts with 1 or 6, exactly 9-12 digits
+      Shree Maruti: exactly 14 digits
+      (fallback)  : shreemaruti
+    """
     awb = awb.strip()
     u = awb.upper()
-    # India Post: 2 letters + 8 digits + "IN" (e.g. EE123456789IN)
+
+    # India Post: 2 letters + 8 digits + "IN"
     if re.match(r'^[A-Z]{2}\d{8}IN$', u):
         return "india_post"
     # Ekart / Flipkart logistics
     if u.startswith(("FMPP", "AWBF", "FBF", "HYF", "FKMP")):
         return "ekart"
-    # XpressBees
-    if u.startswith("XB") or re.match(r'^1\d{13}$', awb):
-        return "xpressbees"
-    # Shadowfax: starts with SFX or SFXIND
+    # Shadowfax
     if u.startswith(("SFX", "SFXIND")):
         return "shadowfax"
-    # Gati: starts with G or GATI, 9-12 chars
+    # Gati KWE
     if re.match(r'^G[A-Z]?\d{6,10}$', u):
         return "gati"
-    # Smartr: starts with SMTR
-    if u.startswith("SMTR"):
-        return "smartr"
-    # Amazon: starts with AMZ or TBA
-    if u.startswith(("AMZ", "TBA")):
-        return "amazon"
     # Aramex: starts with 1 or 6, 9-12 digits
     if re.match(r'^[16]\d{8,11}$', awb):
         return "aramex"
-    # Rivigo / Porter: starts with RVG or PTR
-    if u.startswith(("RVG", "PTR")):
-        return "rivigo"
-    # BlueDart: 11-digit numeric
-    if re.match(r'^\d{11}$', awb):
-        return "bluedart"
-    # DTDC: letter + 6-10 digits
-    if re.match(r'^[A-Z]\d{6,10}$', u):
-        return "dtdc"
-    # Shree Maruti: 14-digit numeric
+    # Shree Maruti: exactly 14 digits
     if re.match(r'^\d{14}$', awb):
         return "shreemaruti"
-    # Delhivery: 13-16 digit numeric
-    if re.match(r'^\d{13,16}$', awb):
-        return "delhivery"
+    # Default fallback
     return "shreemaruti"
 
 
@@ -684,18 +669,11 @@ async def track_rivigo(awb: str) -> dict:
 # ── Unified entry point ───────────────────────────────────────────────────────
 _HANDLERS = {
     "shreemaruti": track_shreemaruti,
-    "delhivery":   track_delhivery,
     "india_post":  track_india_post,
     "ekart":       track_ekart,
-    "dtdc":        track_dtdc,
-    "xpressbees":  track_xpressbees,
-    "bluedart":    track_bluedart,
     "shadowfax":   track_shadowfax,
     "gati":        track_gati,
-    "smartr":      track_smartr,
-    "amazon":      track_amazon,
     "aramex":      track_aramex,
-    "rivigo":      track_rivigo,
 }
 
 

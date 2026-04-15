@@ -32,9 +32,10 @@ def extract_awb_from_image(image_path: str, user_api_key: str = None) -> dict:
                 {
                     "type": "text",
                     "text": (
-                        "This is a courier consignment / receipt image from Shree Maruti courier. "
-                        "Find the AWB number or Consignment Number (also labelled C.N. No., Docket No., "
-                        "Tracking No., or similar). It is usually a long numeric string printed prominently.\n\n"
+                        "This is a courier / shipment receipt image. "
+                        "Find the AWB number, Consignment Number, Tracking Number, or Docket Number "
+                        "(also labelled C.N. No., CN No., AWB No., Waybill No., or similar). "
+                        "It is usually a long alphanumeric string printed prominently on the label.\n\n"
                         "Return ONLY valid JSON:\n"
                         '{"awb": "THE_NUMBER", "confidence": "high|medium|low"}\n\n'
                         'If not found: {"awb": null, "confidence": "low"}'
