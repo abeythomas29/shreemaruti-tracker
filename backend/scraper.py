@@ -1,12 +1,14 @@
 import httpx
+import asyncio
 from datetime import datetime, timezone
 
 API_URL = "https://apis.delcaper.com/tracking/v2/{awb}"
 HEADERS = {
     "Origin": "https://tracking.shreemaruti.com",
     "Referer": "https://tracking.shreemaruti.com/",
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
     "Accept": "application/json",
+    "Accept-Language": "en-US,en;q=0.9",
 }
 
 STATUS_MAP = {
@@ -22,6 +24,10 @@ STATUS_MAP = {
     "rto": ("Return to Origin", False),
     "undelivered": ("Undelivered", False),
 }
+
+# Simple in-memory cache: {awb: (timestamp, result)}
+_cache: dict = {}
+CACHE_TTL_SECONDS = 300  # cache results for 5 minutes
 
 
 def _friendly_status(raw: str):
@@ -39,18 +45,7 @@ def _fmt_time(ts_ms) -> str:
         return str(ts_ms)
 
 
-async def scrape_shreemaruti(awb_number: str) -> dict:
-    url = API_URL.format(awb=awb_number)
-    async with httpx.AsyncClient(timeout=20) as client:
-        try:
-            resp = await client.get(url, headers=HEADERS)
-            resp.raise_for_status()
-            data = resp.json()
-        except httpx.HTTPStatusError as e:
-            return {"error": f"API returned {e.response.status_code}", "awb": awb_number}
-        except Exception as e:
-            return {"error": str(e), "awb": awb_number}
-
+def _parse(data: dict, awb_number: str) -> dict:
     statuses = data.get("statuses", [])
     order = data.get("orderInformation", {})
 
@@ -64,7 +59,6 @@ async def scrape_shreemaruti(awb_number: str) -> dict:
             "events": [],
         }
 
-    # Latest status is first
     latest = statuses[0]
     raw_status = latest.get("status", "")
     friendly, is_delivered = _friendly_status(raw_status)
@@ -96,3 +90,36 @@ async def scrape_shreemaruti(awb_number: str) -> dict:
         "destination": f"{dest.get('city', '')}, {dest.get('state', '')}".strip(", "),
         "receiver": order.get("receiverDetails", {}).get("receiver_name", ""),
     }
+
+
+async def scrape_shreemaruti(awb_number: str) -> dict:
+    # Return cached result if fresh
+    now = datetime.now(timezone.utc).timestamp()
+    if awb_number in _cache:
+        cached_at, cached_result = _cache[awb_number]
+        if now - cached_at < CACHE_TTL_SECONDS:
+            return cached_result
+
+    url = API_URL.format(awb=awb_number)
+
+    # Retry up to 3 times with backoff on 429
+    for attempt in range(3):
+        async with httpx.AsyncClient(timeout=20) as client:
+            try:
+                resp = await client.get(url, headers=HEADERS)
+                if resp.status_code == 429:
+                    if attempt < 2:
+                        await asyncio.sleep(2 ** attempt)  # 1s, 2s
+                        continue
+                    return {"error": "Rate limited by tracking API. Please try again in a moment.", "awb": awb_number}
+                resp.raise_for_status()
+                data = resp.json()
+                result = _parse(data, awb_number)
+                _cache[awb_number] = (now, result)
+                return result
+            except httpx.HTTPStatusError as e:
+                return {"error": f"API returned {e.response.status_code}", "awb": awb_number}
+            except Exception as e:
+                return {"error": str(e), "awb": awb_number}
+
+    return {"error": "Failed after retries", "awb": awb_number}
