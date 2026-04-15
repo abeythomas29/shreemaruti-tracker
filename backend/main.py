@@ -221,17 +221,11 @@ async def public_track(
 
 # ── Authenticated tracking (saves to history) ─────────────────────────────────
 
-def _can_use_ai(user: models.User) -> bool:
-    return bool(user.openai_api_key) or user.subscription_status == "active"
-
-
-def _get_api_key(user: models.User) -> Optional[str]:
-    """Return the right API key: user's own key, or platform key for subscribers."""
+def _get_api_key(user: models.User) -> str:
+    """All logged-in users can use AI — own key takes priority, else platform key."""
     if user.openai_api_key:
         return user.openai_api_key
-    if user.subscription_status == "active":
-        return os.getenv("PLATFORM_OPENAI_API_KEY")
-    return None
+    return os.getenv("PLATFORM_OPENAI_API_KEY", "")
 
 
 @app.post("/scan", response_model=schemas.ScanOut)
@@ -245,12 +239,7 @@ async def scan_receipt(
     if awb_number:
         final_awb = awb_number.strip()
     elif image:
-        if not _can_use_ai(current_user):
-            raise HTTPException(
-                status_code=402,
-                detail="Add your OpenAI API key or subscribe ($10/mo) to use AI receipt scanning.",
-            )
-        # Save image
+        # All logged-in users can scan receipts for free
         ext = image.filename.rsplit(".", 1)[-1] if "." in image.filename else "jpg"
         filename = f"{uuid.uuid4()}.{ext}"
         filepath = UPLOAD_DIR / filename
