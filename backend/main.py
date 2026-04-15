@@ -29,7 +29,11 @@ app = FastAPI(title="Shree Maruti Tracker API", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", os.getenv("FRONTEND_URL", "")],
+    allow_origins=[
+        "http://localhost:3000",
+        "https://shreemaruti-tracker.vercel.app",
+        os.getenv("FRONTEND_URL", ""),
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
