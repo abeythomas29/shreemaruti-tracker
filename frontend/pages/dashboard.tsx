@@ -3,7 +3,7 @@ import { useRouter } from 'next/router'
 import toast from 'react-hot-toast'
 import {
   Upload, Search, Package, MapPin, CheckCircle,
-  Clock, Truck, RefreshCw, Plus, X, ChevronDown
+  Clock, Truck, RefreshCw, Plus, X, ChevronDown, Camera
 } from 'lucide-react'
 import Navbar from '../components/Navbar'
 import API from '../lib/api'
@@ -62,7 +62,8 @@ const COURIERS = [
 
 // ── Track new shipment panel ──────────────────────────────────────────
 function TrackPanel({ onScanned }: { onScanned: (scan: Scan) => void }) {
-  const fileRef = useRef<HTMLInputElement>(null)
+  const fileRef   = useRef<HTMLInputElement>(null)
+  const cameraRef = useRef<HTMLInputElement>(null)
   const [manualAwb, setManualAwb] = useState('')
   const [courier, setCourier] = useState('auto')
   const [loading, setLoading] = useState(false)
@@ -120,13 +121,29 @@ function TrackPanel({ onScanned }: { onScanned: (scan: Scan) => void }) {
         </select>
         <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
       </div>
-      <div
-        onClick={() => fileRef.current?.click()}
-        className="border-2 border-dashed border-gray-200 hover:border-brand-400 rounded-xl p-5 flex items-center gap-3 cursor-pointer transition-colors"
-      >
-        <Upload size={20} className="text-gray-400 shrink-0" />
-        <p className="text-sm text-gray-500">Upload receipt photo — AI reads the AWB</p>
-        <input ref={fileRef} type="file" accept="image/*" className="hidden"
+      <div className="border-2 border-dashed border-gray-200 rounded-xl p-4">
+        <div className="flex gap-2">
+          {/* Gallery upload */}
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            className="flex-1 flex items-center justify-center gap-2 bg-gray-50 hover:bg-brand-50 border border-gray-200 hover:border-brand-400 text-gray-700 hover:text-brand-700 font-medium text-sm py-3 rounded-xl transition-colors"
+          >
+            <Upload size={16} /> Upload photo
+          </button>
+          {/* Camera capture — opens camera directly on mobile */}
+          <button
+            type="button"
+            onClick={() => cameraRef.current?.click()}
+            className="flex-1 flex items-center justify-center gap-2 bg-gray-50 hover:bg-brand-50 border border-gray-200 hover:border-brand-400 text-gray-700 hover:text-brand-700 font-medium text-sm py-3 rounded-xl transition-colors"
+          >
+            <Camera size={16} /> Take photo
+          </button>
+        </div>
+        <p className="text-xs text-center text-gray-400 mt-2">AI reads the AWB number for you</p>
+        <input ref={fileRef}   type="file" accept="image/*" className="hidden"
+          onChange={e => { const f = e.target.files?.[0]; if (f) doScan(f, '') }} />
+        <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden"
           onChange={e => { const f = e.target.files?.[0]; if (f) doScan(f, '') }} />
       </div>
       <div className="flex gap-2">

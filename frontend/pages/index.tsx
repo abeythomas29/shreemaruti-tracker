@@ -5,7 +5,7 @@ import { useRouter } from 'next/router'
 import toast from 'react-hot-toast'
 import {
   Package, Upload, Search, MapPin, CheckCircle,
-  Clock, Truck, AlertCircle, X, LogIn, UserPlus, ChevronDown
+  Clock, Truck, AlertCircle, X, LogIn, UserPlus, ChevronDown, Camera
 } from 'lucide-react'
 import API from '../lib/api'
 import clsx from 'clsx'
@@ -91,7 +91,8 @@ function AuthGateModal({ onClose }: { onClose: () => void }) {
 
 export default function Home() {
   const router = useRouter()
-  const fileRef = useRef<HTMLInputElement>(null)
+  const fileRef    = useRef<HTMLInputElement>(null)
+  const cameraRef  = useRef<HTMLInputElement>(null)
   const [dragging, setDragging]       = useState(false)
   const [file, setFile]               = useState<File | null>(null)
   const [manualAwb, setManualAwb]     = useState('')
@@ -193,23 +194,45 @@ export default function Home() {
             <ChevronDown size={15} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
           </div>
 
-          {/* Drop zone */}
+
+          {/* Upload / Camera buttons */}
           <div
             onDragOver={e => { e.preventDefault(); setDragging(true) }}
             onDragLeave={() => setDragging(false)}
             onDrop={onDrop}
-            onClick={() => fileRef.current?.click()}
             className={clsx(
-              'border-2 border-dashed rounded-xl p-8 flex flex-col items-center gap-2 cursor-pointer transition-colors',
-              dragging ? 'border-brand-500 bg-brand-50' : 'border-gray-200 hover:border-brand-400 hover:bg-gray-50'
+              'border-2 border-dashed rounded-xl p-5 transition-colors',
+              dragging ? 'border-brand-500 bg-brand-50' : 'border-gray-200'
             )}
           >
-            <Upload size={28} className="text-gray-400" />
-            <p className="text-sm font-medium text-gray-700">
-              {file ? file.name : 'Drop receipt photo here or click to upload'}
-            </p>
-            <p className="text-xs text-gray-400">JPG, PNG, WebP — AI reads the AWB for you</p>
-            <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onFileChange} />
+            {file ? (
+              <p className="text-sm font-medium text-gray-700 text-center py-2">{file.name}</p>
+            ) : (
+              <>
+                <p className="text-xs text-center text-gray-400 mb-3">Drop a receipt here, or use the buttons below</p>
+                <div className="flex gap-2">
+                  {/* Gallery upload */}
+                  <button
+                    type="button"
+                    onClick={() => fileRef.current?.click()}
+                    className="flex-1 flex items-center justify-center gap-2 bg-gray-50 hover:bg-brand-50 border border-gray-200 hover:border-brand-400 text-gray-700 hover:text-brand-700 font-medium text-sm py-3 rounded-xl transition-colors"
+                  >
+                    <Upload size={17} /> Upload photo
+                  </button>
+                  {/* Camera capture (opens camera directly on mobile) */}
+                  <button
+                    type="button"
+                    onClick={() => cameraRef.current?.click()}
+                    className="flex-1 flex items-center justify-center gap-2 bg-gray-50 hover:bg-brand-50 border border-gray-200 hover:border-brand-400 text-gray-700 hover:text-brand-700 font-medium text-sm py-3 rounded-xl transition-colors"
+                  >
+                    <Camera size={17} /> Take photo
+                  </button>
+                </div>
+              </>
+            )}
+            {/* Hidden inputs */}
+            <input ref={fileRef}   type="file" accept="image/*" className="hidden" onChange={onFileChange} />
+            <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={onFileChange} />
           </div>
 
           <div className="flex items-center gap-3">
