@@ -6,7 +6,6 @@ passlib[bcrypt]==1.7.4
 bcrypt==4.0.1
 python-multipart==0.0.12
 openai==1.51.0
-playwright==1.47.0
 stripe==11.1.0
 python-dotenv==1.0.1
 pydantic[email]>=2.1.0

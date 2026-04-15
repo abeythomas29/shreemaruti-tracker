@@ -1,96 +1,98 @@
-import asyncio
-from playwright.async_api import async_playwright
+import httpx
+from datetime import datetime, timezone
+
+API_URL = "https://apis.delcaper.com/tracking/v2/{awb}"
+HEADERS = {
+    "Origin": "https://tracking.shreemaruti.com",
+    "Referer": "https://tracking.shreemaruti.com/",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    "Accept": "application/json",
+}
+
+STATUS_MAP = {
+    "delivered": ("Delivered", True),
+    "out_for_delivery": ("Out for Delivery", False),
+    "inscanned_at_cp": ("Arrived at Delivery Point", False),
+    "outscan_to_cp": ("Dispatched to Delivery Point", False),
+    "inscan_at_hub": ("Arrived at Hub", False),
+    "outscan_at_hub": ("Departed from Hub", False),
+    "booked": ("Booked / Picked Up", False),
+    "pickup_done": ("Picked Up", False),
+    "in_transit": ("In Transit", False),
+    "rto": ("Return to Origin", False),
+    "undelivered": ("Undelivered", False),
+}
 
 
-async def _scrape(awb_number: str) -> dict:
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-        context = await browser.new_context(
-            user_agent=(
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/124.0.0.0 Safari/537.36"
-            )
-        )
-        page = await context.new_page()
-
-        try:
-            # The page reads AWB from the URL query param and sets the iframe src automatically
-            url = f"https://shreemaruti.com/track-shipment/?awb={awb_number}"
-            await page.goto(url, timeout=30000)
-            await page.wait_for_load_state("domcontentloaded", timeout=15000)
-            await asyncio.sleep(5)  # let the JS set the iframe src and load
-
-            iframe_el = await page.query_selector("#tracking-iframe")
-            if not iframe_el:
-                return {"error": "Tracking iframe not found", "awb": awb_number}
-
-            frame = await iframe_el.content_frame()
-            if not frame:
-                return {"error": "Could not access iframe content", "awb": awb_number}
-
-            await frame.wait_for_load_state("domcontentloaded")
-            await asyncio.sleep(3)
-
-            body_text = await frame.inner_text("body")
-            return _parse(body_text, awb_number)
-
-        except Exception as exc:
-            return {"error": str(exc), "awb": awb_number}
-        finally:
-            await browser.close()
+def _friendly_status(raw: str):
+    key = raw.lower()
+    for k, v in STATUS_MAP.items():
+        if k in key:
+            return v
+    return (raw.replace("_", " ").title(), False)
 
 
-def _parse(content: str, awb_number: str) -> dict:
-    lines = [ln.strip() for ln in content.splitlines() if ln.strip()]
-    low = content.lower()
-
-    # Determine status
-    if "delivered" in low:
-        status = "Delivered"
-        is_delivered = True
-    elif "out for delivery" in low:
-        status = "Out for Delivery"
-        is_delivered = False
-    elif "in transit" in low:
-        status = "In Transit"
-        is_delivered = False
-    elif "booked" in low or "picked up" in low:
-        status = "Picked Up / Booked"
-        is_delivered = False
-    elif "arrived" in low:
-        status = "Arrived at Hub"
-        is_delivered = False
-    else:
-        status = lines[0] if lines else "Unknown"
-        is_delivered = False
-
-    # Heuristic event parsing
-    keywords = ("delivered", "transit", "out for", "booked", "picked",
-                 "arrived", "departed", "dispatch", "hub")
-    events = []
-    for i, line in enumerate(lines):
-        if any(kw in line.lower() for kw in keywords):
-            events.append({
-                "status": line,
-                "location": lines[i + 1] if i + 1 < len(lines) else None,
-                "event_time": lines[i + 2] if i + 2 < len(lines) else None,
-                "description": line,
-            })
-
-    current_location = events[0]["location"] if events else None
-
-    return {
-        "awb": awb_number,
-        "current_status": status,
-        "current_location": current_location,
-        "is_delivered": is_delivered,
-        "delivery_date": None,
-        "events": events[:15],
-        "raw_content": content,
-    }
+def _fmt_time(ts_ms) -> str:
+    try:
+        return datetime.fromtimestamp(int(ts_ms) / 1000, tz=timezone.utc).strftime("%d/%m/%Y, %I:%M:%S %p")
+    except Exception:
+        return str(ts_ms)
 
 
 async def scrape_shreemaruti(awb_number: str) -> dict:
-    """Async entry point — call with await from FastAPI routes."""
-    return await _scrape(awb_number)
+    url = API_URL.format(awb=awb_number)
+    async with httpx.AsyncClient(timeout=20) as client:
+        try:
+            resp = await client.get(url, headers=HEADERS)
+            resp.raise_for_status()
+            data = resp.json()
+        except httpx.HTTPStatusError as e:
+            return {"error": f"API returned {e.response.status_code}", "awb": awb_number}
+        except Exception as e:
+            return {"error": str(e), "awb": awb_number}
+
+    statuses = data.get("statuses", [])
+    order = data.get("orderInformation", {})
+
+    if not statuses:
+        return {
+            "awb": awb_number,
+            "current_status": "No tracking info yet",
+            "current_location": None,
+            "is_delivered": False,
+            "delivery_date": None,
+            "events": [],
+        }
+
+    # Latest status is first
+    latest = statuses[0]
+    raw_status = latest.get("status", "")
+    friendly, is_delivered = _friendly_status(raw_status)
+    current_location = latest.get("location") or order.get("destinationLocation", {}).get("city")
+
+    events = []
+    for s in statuses:
+        raw = s.get("status", "")
+        label, _ = _friendly_status(raw)
+        ts = s.get("statusTimestamp")
+        events.append({
+            "status": label,
+            "description": s.get("subcategory") or s.get("event") or label,
+            "location": s.get("location"),
+            "event_time": _fmt_time(ts) if ts else None,
+        })
+
+    dest = order.get("destinationLocation", {})
+    src = order.get("sourceLocation", {})
+
+    return {
+        "awb": awb_number,
+        "current_status": friendly,
+        "current_location": current_location,
+        "is_delivered": is_delivered,
+        "delivery_date": _fmt_time(statuses[0].get("statusTimestamp")) if is_delivered else None,
+        "events": events[:15],
+        "origin": f"{src.get('city', '')}, {src.get('state', '')}".strip(", "),
+        "destination": f"{dest.get('city', '')}, {dest.get('state', '')}".strip(", "),
+        "receiver": order.get("receiverDetails", {}).get("receiver_name", ""),
+    }
