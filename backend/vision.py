@@ -21,7 +21,7 @@ def extract_awb_from_image(image_path: str, user_api_key: str = None) -> dict:
                   "png": "image/png", "webp": "image/webp"}.get(ext, "image/jpeg")
 
     response = client.chat.completions.create(
-        model="gpt-4o",
+        model="gpt-4o-mini",
         messages=[{
             "role": "user",
             "content": [
