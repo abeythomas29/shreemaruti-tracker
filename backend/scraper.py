@@ -15,16 +15,11 @@ async def _scrape(awb_number: str) -> dict:
         page = await context.new_page()
 
         try:
-            await page.goto("https://shreemaruti.com/track-shipment/", timeout=30000)
-            await page.wait_for_load_state("networkidle", timeout=15000)
-
-            # Fill tracking number and submit
-            await page.fill("#home-awb", awb_number)
-            await page.click("#home-trackbtn")
-
-            # Wait for the results iframe to appear
-            await page.wait_for_selector("#tracking-iframe", timeout=20000)
-            await asyncio.sleep(4)  # let the iframe fully render
+            # The page reads AWB from the URL query param and sets the iframe src automatically
+            url = f"https://shreemaruti.com/track-shipment/?awb={awb_number}"
+            await page.goto(url, timeout=30000)
+            await page.wait_for_load_state("domcontentloaded", timeout=15000)
+            await asyncio.sleep(5)  # let the JS set the iframe src and load
 
             iframe_el = await page.query_selector("#tracking-iframe")
             if not iframe_el:
@@ -32,10 +27,10 @@ async def _scrape(awb_number: str) -> dict:
 
             frame = await iframe_el.content_frame()
             if not frame:
-                return {"error": "Could not access iframe", "awb": awb_number}
+                return {"error": "Could not access iframe content", "awb": awb_number}
 
             await frame.wait_for_load_state("domcontentloaded")
-            await asyncio.sleep(2)
+            await asyncio.sleep(3)
 
             body_text = await frame.inner_text("body")
             return _parse(body_text, awb_number)
@@ -96,6 +91,6 @@ def _parse(content: str, awb_number: str) -> dict:
     }
 
 
-def scrape_shreemaruti(awb_number: str) -> dict:
-    """Synchronous entry point."""
-    return asyncio.run(_scrape(awb_number))
+async def scrape_shreemaruti(awb_number: str) -> dict:
+    """Async entry point — call with await from FastAPI routes."""
+    return await _scrape(awb_number)

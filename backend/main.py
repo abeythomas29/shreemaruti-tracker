@@ -198,7 +198,7 @@ async def scan_receipt(
         raise HTTPException(status_code=400, detail="Provide an image or AWB number")
 
     # ── Step 2: Scrape Shreemaruti ────────────────────────────────────────────
-    tracking_data = scrape_shreemaruti(final_awb)
+    tracking_data = await scrape_shreemaruti(final_awb)
 
     if "error" in tracking_data and not tracking_data.get("current_status"):
         raise HTTPException(status_code=502, detail=f"Scraping failed: {tracking_data['error']}")
@@ -232,7 +232,7 @@ async def scan_receipt(
 
 
 @app.get("/scan/{awb}", response_model=schemas.ScanOut)
-def refresh_tracking(
+async def refresh_tracking(
     awb: str,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
@@ -247,7 +247,7 @@ def refresh_tracking(
     if not scan:
         raise HTTPException(status_code=404, detail="AWB not found in your history")
 
-    tracking_data = scrape_shreemaruti(awb)
+    tracking_data = await scrape_shreemaruti(awb)
 
     scan.current_status = tracking_data.get("current_status", scan.current_status)
     scan.current_location = tracking_data.get("current_location", scan.current_location)
