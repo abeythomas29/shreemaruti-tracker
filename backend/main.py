@@ -152,7 +152,40 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
     return {"received": True}
 
 
-# ── Tracking ──────────────────────────────────────────────────────────────────
+# ── Public tracking (no auth required) ───────────────────────────────────────
+
+@app.post("/track/public")
+async def public_track(
+    image: Optional[UploadFile] = File(None),
+    awb_number: Optional[str] = Form(None),
+):
+    """Track by AWB or image — no login needed, results not saved."""
+    if awb_number:
+        final_awb = awb_number.strip()
+    elif image:
+        platform_key = os.getenv("PLATFORM_OPENAI_API_KEY")
+        if not platform_key:
+            raise HTTPException(status_code=402, detail="Image scanning requires an account. Please sign up.")
+        ext = image.filename.rsplit(".", 1)[-1] if "." in image.filename else "jpg"
+        filename = f"{uuid.uuid4()}.{ext}"
+        filepath = UPLOAD_DIR / filename
+        with filepath.open("wb") as f:
+            shutil.copyfileobj(image.file, f)
+        result = extract_awb_from_image(str(filepath), platform_key)
+        filepath.unlink(missing_ok=True)  # don't keep image for public requests
+        if not result.get("awb"):
+            raise HTTPException(status_code=422, detail="Could not extract AWB from image. Try entering it manually.")
+        final_awb = result["awb"]
+    else:
+        raise HTTPException(status_code=400, detail="Provide an image or AWB number")
+
+    tracking_data = await scrape_shreemaruti(final_awb)
+    if "error" in tracking_data and not tracking_data.get("current_status"):
+        raise HTTPException(status_code=502, detail=f"Could not fetch tracking: {tracking_data['error']}")
+    return tracking_data
+
+
+# ── Authenticated tracking (saves to history) ─────────────────────────────────
 
 def _can_use_ai(user: models.User) -> bool:
     return bool(user.openai_api_key) or user.subscription_status == "active"
