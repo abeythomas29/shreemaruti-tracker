@@ -1,18 +1,13 @@
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/router'
 import toast from 'react-hot-toast'
-import { Upload, Search, Package, MapPin, CheckCircle, Clock, Truck, AlertCircle } from 'lucide-react'
+import {
+  Upload, Search, Package, MapPin, CheckCircle,
+  Clock, Truck, RefreshCw, Plus, X
+} from 'lucide-react'
 import Navbar from '../components/Navbar'
 import API from '../lib/api'
 import clsx from 'clsx'
-
-interface TrackingEvent {
-  id: number
-  status: string
-  location?: string
-  description?: string
-  event_time?: string
-}
 
 interface Scan {
   id: number
@@ -20,57 +15,57 @@ interface Scan {
   current_status?: string
   current_location?: string
   is_delivered: boolean
-  delivery_date?: string
   last_checked?: string
   created_at: string
-  events: TrackingEvent[]
+  events: any[]
 }
 
-const STATUS_ICON: Record<string, React.ReactNode> = {
-  Delivered: <CheckCircle className="text-green-500" size={20} />,
-  'Out for Delivery': <Truck className="text-blue-500" size={20} />,
-  'In Transit': <Package className="text-orange-400" size={20} />,
-  default: <Clock className="text-gray-400" size={20} />,
+function StatusBadge({ status, delivered }: { status?: string; delivered: boolean }) {
+  const s = (status || '').toLowerCase()
+  if (delivered) return (
+    <span className="flex items-center gap-1 text-xs font-semibold text-green-700 bg-green-100 px-2.5 py-1 rounded-full">
+      <CheckCircle size={11} /> Delivered
+    </span>
+  )
+  if (s.includes('out for')) return (
+    <span className="flex items-center gap-1 text-xs font-semibold text-blue-700 bg-blue-100 px-2.5 py-1 rounded-full">
+      <Truck size={11} /> Out for Delivery
+    </span>
+  )
+  if (s.includes('transit') || s.includes('hub')) return (
+    <span className="flex items-center gap-1 text-xs font-semibold text-orange-700 bg-orange-100 px-2.5 py-1 rounded-full">
+      <Package size={11} /> In Transit
+    </span>
+  )
+  return (
+    <span className="flex items-center gap-1 text-xs font-semibold text-gray-600 bg-gray-100 px-2.5 py-1 rounded-full">
+      <Clock size={11} /> {status || 'Unknown'}
+    </span>
+  )
 }
 
-function statusIcon(status?: string) {
-  if (!status) return STATUS_ICON.default
-  return STATUS_ICON[status] ?? STATUS_ICON.default
-}
-
-export default function Dashboard() {
-  const router = useRouter()
+// ── Track new shipment panel ──────────────────────────────────────────────────
+function TrackPanel({ onScanned }: { onScanned: (scan: Scan) => void }) {
   const fileRef = useRef<HTMLInputElement>(null)
-  const [dragging, setDragging] = useState(false)
-  const [file, setFile] = useState<File | null>(null)
   const [manualAwb, setManualAwb] = useState('')
   const [loading, setLoading] = useState(false)
-  const [result, setResult] = useState<Scan | null>(null)
-  const [lastDelivery, setLastDelivery] = useState<Scan | null>(null)
+  const [open, setOpen] = useState(false)
 
-  useEffect(() => {
-    if (!localStorage.getItem('token')) { router.replace('/login'); return }
-    API.get('/history/last-delivery').then(r => setLastDelivery(r.data)).catch(() => {})
-
-    if (router.query.subscription === 'success') {
-      toast.success('Subscription activated! You can now scan without an API key.')
-    }
-  }, [router])
-
-  const doScan = async (f: File | null, awb: string) => {
+  const doScan = async (file: File | null, awb: string) => {
     setLoading(true)
-    setResult(null)
     try {
       const fd = new FormData()
-      if (f) fd.append('image', f)
+      if (file) fd.append('image', file)
       if (awb) fd.append('awb_number', awb)
       const { data } = await API.post<Scan>('/scan', fd)
-      setResult(data)
-      toast.success('Tracking fetched!')
+      onScanned(data)
+      setManualAwb('')
+      setOpen(false)
+      toast.success('Tracking saved to dashboard!')
     } catch (err: any) {
-      const msg = err.response?.data?.detail || 'Failed to fetch tracking'
+      const msg = err.response?.data?.detail || 'Failed to track'
       if (err.response?.status === 402) {
-        toast.error('Add your API key or subscribe to use AI scanning.', { duration: 6000 })
+        toast.error('Add your OpenAI API key or subscribe in Settings to scan receipts.')
       } else {
         toast.error(msg)
       }
@@ -79,126 +74,190 @@ export default function Dashboard() {
     }
   }
 
-  const onDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    setDragging(false)
-    const f = e.dataTransfer.files[0]
-    if (f) { setFile(f); doScan(f, '') }
-  }, [])
+  if (!open) return (
+    <button
+      onClick={() => setOpen(true)}
+      className="btn-primary flex items-center gap-2"
+    >
+      <Plus size={16} /> Track new shipment
+    </button>
+  )
 
-  const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0]
-    if (f) { setFile(f); doScan(f, '') }
+  return (
+    <div className="card border-brand-200 border-2 space-y-3">
+      <div className="flex items-center justify-between">
+        <h3 className="font-semibold text-gray-900">Track a shipment</h3>
+        <button onClick={() => setOpen(false)} className="text-gray-400 hover:text-gray-600"><X size={16} /></button>
+      </div>
+      <div
+        onClick={() => fileRef.current?.click()}
+        className="border-2 border-dashed border-gray-200 hover:border-brand-400 rounded-xl p-5 flex items-center gap-3 cursor-pointer transition-colors"
+      >
+        <Upload size={20} className="text-gray-400 shrink-0" />
+        <p className="text-sm text-gray-500">Upload receipt photo — AI reads the AWB</p>
+        <input ref={fileRef} type="file" accept="image/*" className="hidden"
+          onChange={e => { const f = e.target.files?.[0]; if (f) doScan(f, '') }} />
+      </div>
+      <div className="flex gap-2">
+        <input
+          className="input flex-1"
+          placeholder="Or enter AWB manually"
+          value={manualAwb}
+          onChange={e => setManualAwb(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter' && manualAwb) doScan(null, manualAwb) }}
+        />
+        <button
+          className="btn-primary flex items-center gap-2"
+          disabled={loading || !manualAwb}
+          onClick={() => doScan(null, manualAwb)}
+        >
+          <Search size={15} />
+          {loading ? 'Tracking…' : 'Track'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ── Main dashboard ────────────────────────────────────────────────────────────
+export default function Dashboard() {
+  const router = useRouter()
+  const [scans, setScans] = useState<Scan[]>([])
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState<string | null>(null)
+  const [expanded, setExpanded] = useState<number | null>(null)
+
+  useEffect(() => {
+    if (!localStorage.getItem('token')) { router.replace('/login'); return }
+    API.get<Scan[]>('/history')
+      .then(r => setScans(r.data))
+      .catch(() => router.replace('/login'))
+      .finally(() => setLoading(false))
+    if (router.query.subscription === 'success') {
+      toast.success('Subscription activated!')
+    }
+  }, [router])
+
+  const refresh = async (awb: string) => {
+    setRefreshing(awb)
+    try {
+      const { data } = await API.get<Scan>(`/scan/${awb}`)
+      setScans(prev => prev.map(s => s.awb_number === awb ? { ...s, ...data } : s))
+      toast.success('Status updated')
+    } catch {
+      toast.error('Failed to refresh')
+    } finally {
+      setRefreshing(null)
+    }
   }
+
+  const onScanned = (scan: Scan) => {
+    setScans(prev => {
+      const exists = prev.find(s => s.awb_number === scan.awb_number)
+      if (exists) return prev.map(s => s.awb_number === scan.awb_number ? { ...s, ...scan } : s)
+      return [scan, ...prev]
+    })
+  }
+
+  const delivered = scans.filter(s => s.is_delivered).length
+  const inProgress = scans.filter(s => !s.is_delivered).length
 
   return (
     <div className="min-h-screen bg-gray-50">
       <Navbar />
       <main className="max-w-3xl mx-auto px-4 py-8 space-y-6">
 
-        {/* Last delivery banner */}
-        {lastDelivery && (
-          <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-xl p-4 text-sm">
-            <CheckCircle className="text-green-500 shrink-0" size={18} />
-            <span className="text-green-800">
-              Last delivery: <strong>{lastDelivery.awb_number}</strong> — {lastDelivery.current_location || 'Delivered'} on {new Date(lastDelivery.created_at).toLocaleDateString()}
-            </span>
-          </div>
-        )}
-
-        {/* Upload area */}
-        <div className="card space-y-4">
-          <h2 className="font-semibold text-gray-900">Track a Shipment</h2>
-
-          {/* Drop zone */}
-          <div
-            onDragOver={e => { e.preventDefault(); setDragging(true) }}
-            onDragLeave={() => setDragging(false)}
-            onDrop={onDrop}
-            onClick={() => fileRef.current?.click()}
-            className={clsx(
-              'border-2 border-dashed rounded-xl p-10 flex flex-col items-center gap-3 cursor-pointer transition-colors',
-              dragging ? 'border-brand-500 bg-brand-50' : 'border-gray-200 hover:border-brand-400'
-            )}
-          >
-            <Upload size={32} className="text-gray-400" />
-            <p className="text-sm text-gray-600 font-medium">
-              {file ? file.name : 'Drop receipt image here or click to upload'}
+        {/* Header row */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-bold text-gray-900">My Shipments</h1>
+            <p className="text-sm text-gray-500 mt-0.5">
+              {scans.length} total · {inProgress} in progress · {delivered} delivered
             </p>
-            <p className="text-xs text-gray-400">JPG, PNG, WebP supported</p>
-            <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onFileChange} />
           </div>
-
-          <div className="flex items-center gap-3">
-            <div className="h-px flex-1 bg-gray-200" />
-            <span className="text-xs text-gray-400 font-medium">OR enter AWB manually</span>
-            <div className="h-px flex-1 bg-gray-200" />
-          </div>
-
-          <div className="flex gap-2">
-            <input
-              className="input flex-1"
-              placeholder="e.g. 26038200137771"
-              value={manualAwb}
-              onChange={e => setManualAwb(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter' && manualAwb) doScan(null, manualAwb) }}
-            />
-            <button
-              className="btn-primary flex items-center gap-2"
-              disabled={loading || !manualAwb}
-              onClick={() => doScan(null, manualAwb)}
-            >
-              <Search size={16} />
-              {loading ? 'Tracking…' : 'Track'}
-            </button>
-          </div>
+          <TrackPanel onScanned={onScanned} />
         </div>
 
-        {/* Loading state */}
-        {loading && (
-          <div className="card flex items-center gap-4 animate-pulse">
-            <div className="w-10 h-10 bg-gray-200 rounded-full" />
-            <div className="flex-1 space-y-2">
-              <div className="h-4 bg-gray-200 rounded w-1/3" />
-              <div className="h-3 bg-gray-100 rounded w-1/2" />
-            </div>
+        {/* Stats */}
+        {scans.length > 0 && (
+          <div className="grid grid-cols-3 gap-4">
+            {[
+              { label: 'Total tracked', value: scans.length, color: 'text-gray-900' },
+              { label: 'In progress', value: inProgress, color: 'text-orange-500' },
+              { label: 'Delivered', value: delivered, color: 'text-green-600' },
+            ].map(({ label, value, color }) => (
+              <div key={label} className="card text-center py-4">
+                <p className={clsx('text-2xl font-extrabold', color)}>{value}</p>
+                <p className="text-xs text-gray-500 mt-0.5">{label}</p>
+              </div>
+            ))}
           </div>
         )}
 
-        {/* Result */}
-        {result && !loading && (
-          <div className="card space-y-5">
-            {/* Header */}
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-xs text-gray-400 mb-0.5 font-mono">AWB {result.awb_number}</p>
-                <div className="flex items-center gap-2">
-                  {statusIcon(result.current_status)}
-                  <span className="text-lg font-bold text-gray-900">{result.current_status || 'Unknown'}</span>
+        {/* Shipment cards */}
+        {loading && (
+          <div className="space-y-3">
+            {[1, 2, 3].map(i => <div key={i} className="h-20 bg-gray-100 rounded-2xl animate-pulse" />)}
+          </div>
+        )}
+
+        {!loading && scans.length === 0 && (
+          <div className="card text-center py-16">
+            <Package size={40} className="text-gray-300 mx-auto mb-3" />
+            <p className="font-semibold text-gray-600">No shipments yet</p>
+            <p className="text-sm text-gray-400 mt-1">Click "Track new shipment" to get started</p>
+          </div>
+        )}
+
+        {!loading && scans.map(scan => (
+          <div key={scan.id} className="card space-y-0 p-0 overflow-hidden">
+            {/* Card header */}
+            <div
+              className="flex items-center gap-4 p-5 cursor-pointer hover:bg-gray-50 transition-colors"
+              onClick={() => setExpanded(expanded === scan.id ? null : scan.id)}
+            >
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="font-mono font-semibold text-gray-900 text-sm">{scan.awb_number}</p>
+                  <StatusBadge status={scan.current_status} delivered={scan.is_delivered} />
                 </div>
-                {result.current_location && (
-                  <div className="flex items-center gap-1.5 text-sm text-gray-500 mt-1">
-                    <MapPin size={13} /> {result.current_location}
-                  </div>
+                {scan.current_location && (
+                  <p className="flex items-center gap-1 text-xs text-gray-500 mt-1">
+                    <MapPin size={11} /> {scan.current_location}
+                  </p>
                 )}
+                <p className="text-xs text-gray-400 mt-0.5">
+                  Tracked {new Date(scan.created_at).toLocaleDateString()} ·{' '}
+                  {scan.last_checked ? `checked ${new Date(scan.last_checked).toLocaleTimeString()}` : ''}
+                </p>
               </div>
-              <span className={clsx(
-                'text-xs font-semibold px-3 py-1 rounded-full',
-                result.is_delivered ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'
-              )}>
-                {result.is_delivered ? 'Delivered' : 'In Progress'}
-              </span>
+              <div className="flex items-center gap-2 shrink-0">
+                {!scan.is_delivered && (
+                  <button
+                    onClick={e => { e.stopPropagation(); refresh(scan.awb_number) }}
+                    disabled={refreshing === scan.awb_number}
+                    className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-brand-600 transition-colors"
+                    title="Refresh status"
+                  >
+                    <RefreshCw size={15} className={clsx(refreshing === scan.awb_number && 'animate-spin')} />
+                  </button>
+                )}
+                <span className="text-gray-300 text-lg">{expanded === scan.id ? '▲' : '▼'}</span>
+              </div>
             </div>
 
-            {/* Events timeline */}
-            {result.events.length > 0 && (
-              <div>
-                <p className="text-sm font-medium text-gray-700 mb-3">Tracking timeline</p>
-                <ol className="relative border-l border-gray-200 space-y-4 ml-2">
-                  {result.events.map((ev, i) => (
-                    <li key={ev.id ?? i} className="ml-4">
-                      <div className="absolute -left-1.5 mt-1.5 w-3 h-3 rounded-full border-2 border-white bg-brand-500" />
+            {/* Expanded timeline */}
+            {expanded === scan.id && scan.events.length > 0 && (
+              <div className="border-t border-gray-100 px-5 py-4 bg-gray-50">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Timeline</p>
+                <ol className="relative border-l border-gray-200 space-y-3 ml-2">
+                  {scan.events.map((ev, i) => (
+                    <li key={i} className="ml-4">
+                      <div className="absolute -left-1.5 mt-1 w-3 h-3 rounded-full border-2 border-white bg-brand-500" />
                       <p className="text-sm font-medium text-gray-800">{ev.status}</p>
+                      {ev.description && ev.description !== ev.status && (
+                        <p className="text-xs text-gray-500">{ev.description}</p>
+                      )}
                       {ev.location && <p className="text-xs text-gray-500">{ev.location}</p>}
                       {ev.event_time && <p className="text-xs text-gray-400">{ev.event_time}</p>}
                     </li>
@@ -206,18 +265,13 @@ export default function Dashboard() {
                 </ol>
               </div>
             )}
-
-            {result.events.length === 0 && (
-              <div className="flex items-center gap-2 text-sm text-gray-500 bg-gray-50 rounded-lg p-3">
-                <AlertCircle size={15} /> No detailed events available yet.
+            {expanded === scan.id && scan.events.length === 0 && (
+              <div className="border-t border-gray-100 px-5 py-4 text-sm text-gray-400 bg-gray-50">
+                No timeline events yet.
               </div>
             )}
-
-            <p className="text-xs text-gray-400">
-              Last checked: {result.last_checked ? new Date(result.last_checked).toLocaleString() : 'just now'}
-            </p>
           </div>
-        )}
+        ))}
       </main>
     </div>
   )
