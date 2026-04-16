@@ -34,6 +34,7 @@ app.add_middleware(
         "http://localhost:3000",
         "https://shreemaruti-tracker.vercel.app",
         "https://couriertrack.ai",
+        "https://track.abtconsult.in",
         os.getenv("FRONTEND_URL", ""),
     ],
     allow_credentials=True,
