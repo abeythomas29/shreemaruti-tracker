@@ -36,9 +36,13 @@ def extract_awb_from_image(image_path: str, user_api_key: str = None) -> dict:
                         "Find the AWB number, Consignment Number, Tracking Number, or Docket Number "
                         "(also labelled C.N. No., CN No., AWB No., Waybill No., or similar). "
                         "It is usually a long alphanumeric string printed prominently on the label.\n\n"
+                        "Also identify the courier company from logos, branding, or text on the label. "
+                        "Use one of these IDs if you recognise it: shreemaruti, india_post, ekart, "
+                        "shadowfax, gati, aramex, dtdc, delhivery, bluedart, xpressbees. "
+                        "If unknown, set courier to null.\n\n"
                         "Return ONLY valid JSON:\n"
-                        '{"awb": "THE_NUMBER", "confidence": "high|medium|low"}\n\n'
-                        'If not found: {"awb": null, "confidence": "low"}'
+                        '{"awb": "THE_NUMBER", "courier": "COURIER_ID_OR_NULL", "confidence": "high|medium|low"}\n\n'
+                        'If AWB not found: {"awb": null, "courier": null, "confidence": "low"}'
                     )
                 }
             ]

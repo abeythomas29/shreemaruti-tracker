@@ -3,7 +3,7 @@ import { useRouter } from 'next/router'
 import toast from 'react-hot-toast'
 import {
   Upload, Search, Package, MapPin, CheckCircle,
-  Clock, Truck, RefreshCw, Plus, X, ChevronDown, Camera
+  Clock, Truck, RefreshCw, Plus, X, ChevronDown, Camera, Copy, ExternalLink
 } from 'lucide-react'
 import Navbar from '../components/Navbar'
 import API from '../lib/api'
@@ -38,6 +38,11 @@ function StatusBadge({ status, delivered }: { status?: string; delivered: boolea
       <Package size={11} /> In Transit
     </span>
   )
+  if (s.includes('track on courier')) return (
+    <span className="flex items-center gap-1 text-xs font-semibold text-purple-700 bg-purple-100 px-2.5 py-1 rounded-full">
+      <ExternalLink size={11} /> Manual tracking
+    </span>
+  )
   return (
     <span className="flex items-center gap-1 text-xs font-semibold text-gray-600 bg-gray-100 px-2.5 py-1 rounded-full">
       <Clock size={11} /> {status || 'Unknown'}
@@ -52,11 +57,25 @@ const COURIERS = [
   { id: 'shadowfax',   name: 'Shadowfax' },
   { id: 'gati',        name: 'Gati KWE' },
   { id: 'aramex',      name: 'Aramex' },
+  { id: 'dtdc',        name: 'DTDC Express' },
 ]
 
 const COURIER_LABEL: Record<string, string> = Object.fromEntries(
   COURIERS.map(c => [c.id, c.name])
 )
+
+const COURIER_TRACKING_URL: Record<string, (awb: string) => string> = {
+  dtdc:        (awb) => `https://www.dtdc.in/tracking.asp?Ttype=consignment&TNo=${awb}`,
+  bluedart:    (awb) => `https://www.bluedart.com/web/guest/trackdartship?trackFor=0&trackID=${awb}`,
+  delhivery:   (awb) => `https://www.delhivery.com/track/package/${awb}`,
+  xpressbees:  (awb) => `https://www.xpressbees.com/shipment/tracking?awbNo=${awb}`,
+  india_post:  (awb) => `https://www.indiapost.gov.in/vas/pages/trackconsignment.aspx?ConsignmentNo=${awb}`,
+  ekart:       (awb) => `https://ekartlogistics.com/track?trackingId=${awb}`,
+  shadowfax:   (awb) => `https://tracker.shadowfax.in/#${awb}`,
+  gati:        (awb) => `https://www.gati.com/track-docket?docket=${awb}`,
+  aramex:      (awb) => `https://www.aramex.com/us/en/track/results?ShipmentNumber=${awb}`,
+  shreemaruti: (awb) => `https://tracking.shreemaruti.com/${awb}`,
+}
 
 // ── Track new shipment panel ──────────────────────────────────────────
 function TrackPanel({ onScanned }: { onScanned: (scan: Scan) => void }) {
@@ -317,11 +336,41 @@ export default function Dashboard() {
                 </ol>
               </div>
             )}
-            {expanded === scan.id && scan.events.length === 0 && (
-              <div className="border-t border-gray-100 px-5 py-4 text-sm text-gray-400 bg-gray-50">
-                No timeline events yet.
-              </div>
-            )}
+            {expanded === scan.id && scan.events.length === 0 && (() => {
+              const trackUrl = scan.courier ? COURIER_TRACKING_URL[scan.courier]?.(scan.awb_number) : null
+              return (
+                <div className="border-t border-gray-100 px-5 py-4 bg-gray-50 space-y-3">
+                  <p className="text-sm text-gray-500">
+                    <span className="font-medium">{COURIER_LABEL[scan.courier ?? ''] ?? scan.courier ?? 'This courier'}</span>
+                    {' '}cannot be tracked automatically. Use the tracking ID below on their website.
+                  </p>
+                  <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-4 py-2.5">
+                    <span className="font-mono text-sm font-semibold text-gray-800 flex-1 select-all">{scan.awb_number}</span>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(scan.awb_number)
+                        toast.success('Tracking ID copied!')
+                      }}
+                      className="flex items-center gap-1 text-xs text-brand-600 hover:text-brand-800 font-medium shrink-0"
+                      title="Copy tracking ID"
+                    >
+                      <Copy size={13} /> Copy
+                    </button>
+                  </div>
+                  {trackUrl && (
+                    <a
+                      href={trackUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 text-sm font-medium text-brand-600 hover:text-brand-800"
+                    >
+                      <ExternalLink size={14} />
+                      Track on {COURIER_LABEL[scan.courier ?? ''] ?? scan.courier} website
+                    </a>
+                  )}
+                </div>
+              )
+            })()}
           </div>
         ))}
       </main>

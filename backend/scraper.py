@@ -12,6 +12,7 @@ COURIERS = {
     "shadowfax":   "Shadowfax",
     "gati":        "Gati KWE",
     "aramex":      "Aramex",
+    "dtdc":        "DTDC Express",
 }
 
 # ── Common status map ─────────────────────────────────────────────────────────
@@ -97,6 +98,9 @@ def detect_courier(awb: str) -> str:
     # Aramex: starts with 1 or 6, 9-12 digits
     if re.match(r'^[16]\d{8,11}$', awb):
         return "aramex"
+    # DTDC: one letter + 7-9 digits (e.g. B34234010)
+    if re.match(r'^[A-Z]\d{7,9}$', u):
+        return "dtdc"
     # Shree Maruti: exactly 14 digits
     if re.match(r'^\d{14}$', awb):
         return "shreemaruti"
@@ -674,6 +678,7 @@ _HANDLERS = {
     "shadowfax":   track_shadowfax,
     "gati":        track_gati,
     "aramex":      track_aramex,
+    "dtdc":        track_dtdc,
 }
 
 

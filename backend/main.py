@@ -217,12 +217,16 @@ async def public_track(
         if not result.get("awb"):
             raise HTTPException(status_code=422, detail="Could not extract AWB from image. Try entering it manually.")
         final_awb = result["awb"]
+        if (not courier or courier == "auto") and result.get("courier"):
+            courier = result["courier"]
     else:
         raise HTTPException(status_code=400, detail="Provide an image or AWB number")
 
     tracking_data = await track_shipment(final_awb, courier or "auto")
     if "error" in tracking_data and not tracking_data.get("current_status"):
-        raise HTTPException(status_code=502, detail=f"Could not fetch tracking: {tracking_data['error']}")
+        tracking_data["current_status"] = "Track on courier website"
+        tracking_data["is_delivered"] = False
+        tracking_data["events"] = []
 
     tracking_data["searches_remaining"] = remaining
     return tracking_data
@@ -260,6 +264,9 @@ async def scan_receipt(
         if not result.get("awb"):
             raise HTTPException(status_code=422, detail="Could not extract AWB from image")
         final_awb = result["awb"]
+        # Use AI-detected courier if caller didn't specify one
+        if (not courier or courier == "auto") and result.get("courier"):
+            courier = result["courier"]
     else:
         raise HTTPException(status_code=400, detail="Provide an image or AWB number")
 
@@ -268,7 +275,10 @@ async def scan_receipt(
     resolved_courier = tracking_data.get("courier", "shreemaruti")
 
     if "error" in tracking_data and not tracking_data.get("current_status"):
-        raise HTTPException(status_code=502, detail=f"Tracking failed: {tracking_data['error']}")
+        # Can't fetch live data — save with a manual-tracking status so user still sees the AWB + courier
+        tracking_data["current_status"] = "Track on courier website"
+        tracking_data["is_delivered"] = False
+        tracking_data["events"] = []
 
     # ── Step 3: Save to DB ────────────────────────────────────────────────────
     scan = models.Scan(
