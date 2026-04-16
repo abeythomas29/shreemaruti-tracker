@@ -5,7 +5,7 @@ import { useRouter } from 'next/router'
 import toast from 'react-hot-toast'
 import {
   Package, Upload, Search, MapPin, CheckCircle,
-  Clock, Truck, AlertCircle, X, LogIn, UserPlus, ChevronDown, Camera
+  Clock, Truck, AlertCircle, X, LogIn, UserPlus, ChevronDown, Camera, Copy, ExternalLink
 } from 'lucide-react'
 import API from '../lib/api'
 import clsx from 'clsx'
@@ -36,11 +36,25 @@ const COURIERS = [
   { id: 'shadowfax',   name: 'Shadowfax' },
   { id: 'gati',        name: 'Gati KWE' },
   { id: 'aramex',      name: 'Aramex' },
+  { id: 'dtdc',        name: 'DTDC Express' },
 ]
 
 const COURIER_LABEL: Record<string, string> = Object.fromEntries(
   COURIERS.map(c => [c.id, c.name])
 )
+
+const COURIER_TRACKING_URL: Record<string, (awb: string) => string> = {
+  dtdc:        (awb) => `https://www.dtdc.in/tracking.asp?Ttype=consignment&TNo=${awb}`,
+  bluedart:    (awb) => `https://www.bluedart.com/web/guest/trackdartship?trackFor=0&trackID=${awb}`,
+  delhivery:   (awb) => `https://www.delhivery.com/track/package/${awb}`,
+  xpressbees:  (awb) => `https://www.xpressbees.com/shipment/tracking?awbNo=${awb}`,
+  india_post:  (awb) => `https://www.indiapost.gov.in/vas/pages/trackconsignment.aspx?ConsignmentNo=${awb}`,
+  ekart:       (awb) => `https://ekartlogistics.com/track?trackingId=${awb}`,
+  shadowfax:   (awb) => `https://tracker.shadowfax.in/#${awb}`,
+  gati:        (awb) => `https://www.gati.com/track-docket?docket=${awb}`,
+  aramex:      (awb) => `https://www.aramex.com/us/en/track/results?ShipmentNumber=${awb}`,
+  shreemaruti: (awb) => `https://tracking.shreemaruti.com/${awb}`,
+}
 
 function statusIcon(status?: string) {
   const s = (status || '').toLowerCase()
@@ -320,11 +334,41 @@ export default function Home() {
               </div>
             )}
 
-            {result.events.length === 0 && (
-              <div className="flex items-center gap-2 text-sm text-gray-500 bg-gray-50 rounded-lg p-3">
-                <AlertCircle size={15} /> No detailed events available yet.
-              </div>
-            )}
+            {result.events.length === 0 && (() => {
+              const trackUrl = result.courier ? COURIER_TRACKING_URL[result.courier]?.(result.awb) : null
+              const courierName = result.courier ? (COURIER_LABEL[result.courier] ?? result.courier) : 'the courier'
+              return (
+                <div className="space-y-3">
+                  <p className="text-sm text-gray-500">
+                    <span className="font-medium">{courierName}</span> cannot be tracked automatically.
+                    Use the tracking ID below on their website.
+                  </p>
+                  <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5">
+                    <span className="font-mono text-sm font-semibold text-gray-800 flex-1 select-all">{result.awb}</span>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(result.awb)
+                        toast.success('Tracking ID copied!')
+                      }}
+                      className="flex items-center gap-1 text-xs text-brand-600 hover:text-brand-800 font-medium shrink-0"
+                    >
+                      <Copy size={13} /> Copy
+                    </button>
+                  </div>
+                  {trackUrl && (
+                    <a
+                      href={trackUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 text-sm font-medium text-brand-600 hover:text-brand-800"
+                    >
+                      <ExternalLink size={14} />
+                      Track on {courierName} website
+                    </a>
+                  )}
+                </div>
+              )
+            })()}
           </div>
         )}
 
