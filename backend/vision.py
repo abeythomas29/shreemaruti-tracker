@@ -32,17 +32,21 @@ def extract_awb_from_image(image_path: str, user_api_key: str = None) -> dict:
                 {
                     "type": "text",
                     "text": (
-                        "This is a courier / shipment receipt image. "
-                        "Find the AWB number, Consignment Number, Tracking Number, or Docket Number "
-                        "(also labelled C.N. No., CN No., AWB No., Waybill No., or similar). "
-                        "It is usually a long alphanumeric string printed prominently on the label.\n\n"
-                        "Also identify the courier company from logos, branding, or text on the label. "
-                        "Use one of these IDs if you recognise it: shreemaruti, india_post, ekart, "
-                        "shadowfax, gati, aramex, dtdc, delhivery, bluedart, xpressbees. "
+                        "This image shows a courier shipment — it could be a printed receipt/document, "
+                        "OR a photo of a physical package/box with courier stickers or barcode labels stuck on it.\n\n"
+                        "Your job: find the AWB / tracking / consignment number. Look in ALL of these places:\n"
+                        "1. Numbers printed BELOW a barcode on any sticker or label on the package\n"
+                        "2. Fields labelled AWB No., C.N. No., CN No., Tracking No., Docket No., Waybill No., Consignment No.\n"
+                        "3. Long numeric or alphanumeric strings (8-20 characters) on courier branded stickers\n"
+                        "4. Numbers printed under barcodes on small courier hub stickers (e.g. Shree Maruti, DTDC, etc.)\n\n"
+                        "IMPORTANT: Ignore handwritten numbers, box dimensions, phone numbers, pin codes, and invoice numbers. "
+                        "Prefer the number that appears directly beneath a barcode on a courier-branded sticker.\n\n"
+                        "Also identify the courier company from logos, branding, or text. "
+                        "Use one of: shreemaruti, india_post, ekart, shadowfax, gati, aramex, dtdc, delhivery, bluedart, xpressbees. "
                         "If unknown, set courier to null.\n\n"
                         "Return ONLY valid JSON:\n"
                         '{"awb": "THE_NUMBER", "courier": "COURIER_ID_OR_NULL", "confidence": "high|medium|low"}\n\n'
-                        'If AWB not found: {"awb": null, "courier": null, "confidence": "low"}'
+                        'If not found: {"awb": null, "courier": null, "confidence": "low"}'
                     )
                 }
             ]
