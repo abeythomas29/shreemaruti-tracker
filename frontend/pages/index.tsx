@@ -335,9 +335,10 @@ export default function Home() {
             )}
 
             {result.events.length === 0 && (() => {
+              const isManual = (result.current_status || '').toLowerCase().includes('track on courier')
               const trackUrl = result.courier ? COURIER_TRACKING_URL[result.courier]?.(result.awb) : null
               const courierName = result.courier ? (COURIER_LABEL[result.courier] ?? result.courier) : 'the courier'
-              return (
+              if (isManual) return (
                 <div className="space-y-3">
                   <p className="text-sm text-gray-500">
                     <span className="font-medium">{courierName}</span> cannot be tracked automatically.
@@ -366,6 +367,11 @@ export default function Home() {
                       Track on {courierName} website
                     </a>
                   )}
+                </div>
+              )
+              return (
+                <div className="flex items-center gap-2 text-sm text-gray-500 bg-gray-50 rounded-lg p-3">
+                  <AlertCircle size={15} /> No detailed events available yet.
                 </div>
               )
             })()}

@@ -337,7 +337,13 @@ export default function Dashboard() {
               </div>
             )}
             {expanded === scan.id && scan.events.length === 0 && (() => {
+              const isManual = (scan.current_status || '').toLowerCase().includes('track on courier')
               const trackUrl = scan.courier ? COURIER_TRACKING_URL[scan.courier]?.(scan.awb_number) : null
+              if (!isManual) return (
+                <div className="border-t border-gray-100 px-5 py-4 text-sm text-gray-400 bg-gray-50">
+                  No timeline events yet.
+                </div>
+              )
               return (
                 <div className="border-t border-gray-100 px-5 py-4 bg-gray-50 space-y-3">
                   <p className="text-sm text-gray-500">
